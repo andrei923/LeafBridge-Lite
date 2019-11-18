@@ -1,0 +1,707 @@
+
+import:
+	org.bukkit.Bukkit
+	java.util.Arrays
+
+options:
+
+	plugin-version: 0.1.0
+	prefix: &6&lThe Bridge &7
+	chat-format: %{_team}% &7%player's displayname% &8» &7%message% 
+	
+	item.leave.name: &cLeave
+	item.leave.item: magma cream
+
+	#messages
+	join: &7%player's displayname% &ehas joined to the game. 
+	left: &7%{_p}'s displayname% &ehas left the game.
+	starting: &eStarting in &6%{bridge::arena::%{_arena}%::seconds}% &eseconds
+	in-game: &cYou are already in game.
+	not-in-game: &cYou are not in game.
+	kill: &c%{_p}% &ewas killed by &c%{_killer}%
+
+
+	
+#
+# \\ CODE //
+#
+
+local effect [leaf] send title %string% with subtitle %string% to %players% with %number% fadein and %number% fadeout for %number%:		
+	trigger:
+		loop exprs-3:
+			{bridge::cache::TitleManager}.sendTitle(loop-value-1, expr-1, expr-4, expr-5 and expr-6)
+			{bridge::cache::TitleManager}.sendSubtitle(loop-value-1 and expr-2)
+			
+local effect [leaf] send action bar %string% to %players%:	
+	trigger:
+		loop exprs-2:
+			{bridge::cache::TitleManager}.sendActionbar(loop-value-1 and expr-1)
+
+local effect create scoreboard for %player%:	
+	trigger:
+		if {bridge::cache::TitleManager}.hasScoreboard(expr-1) is true:
+			{bridge::cache::TitleManager}.removeScoreboard(expr-1)
+		{bridge::cache::TitleManager}.giveScoreboard(expr-1)
+
+local effect delete scoreboard of %player%:	
+	trigger:
+		{bridge::cache::TitleManager}.removeScoreboard(expr-1)	
+
+local effect set scoreboard title of %player% to %string%:	
+	trigger:
+		{bridge::cache::TitleManager}.setScoreboardTitle(expr-1 and expr-2)
+
+local effect set scoreboard line %number% of %player% to %string%:	
+	trigger:
+		{bridge::cache::TitleManager}.setScoreboardValue(expr-2, expr-1 and expr-3)
+
+#From mirror-utils
+expression %item% with lore %text%:
+	return type: item
+	get:
+		set {_i} to expr-1.clone()
+		set {_meta} to {_i}.getItemMeta()
+		{_meta}.setLore(Arrays.asList(split expr-2 at "||"))
+		{_i}.setItemMeta({_meta})
+		return {_i}
+			
+
+command bridge [<text>] [<text>] [<text>]:
+	executable by: players
+	trigger:
+		if arg-1 is "help" or "createarena" or "setspawn" or "join" or "leave" or "setlobby" or "deleteArena" or "list" or "autojoin" or "savearena" or "setPortalPos1" or "setPortalPos2" or "autojoin" or "stats" or "SetMaxBuildHeight":
+			if arg 1 is "help":
+				if player have permission "bridge.player":
+					send "&7&l----------------&8[ {@prefix} &8]&7&l----------------"
+					send "&7/bridge list"
+					send "&7/bridge join &8(&7arena_name&8)"
+					send "&7/bridge autojoin"
+					send "&7/bridge leave"
+				if player have permission "bridge.admin":
+					send "&7/bridge resetstats &8(&7player_name&8)"				
+					send "&7/bridge setlobby"
+					send "&7/bridge createArena &8(&7arena_name&8)                "
+					send "&7/bridge savearena &8(&7arena_name&8)                   "					
+					send "&7/bridge deleteArena &8(&7arena_name&8)            "
+					send "&7/bridge setspawn &8(&7arena_name&8) &cred&7/&3blue&7/&alobby"	
+					send "&7/bridge setPortalPos1 &8(&7arena_name&8) &cred&7/&3blue&7"				
+					send "&7/bridge setPortalPos2 &8(&7arena_name&8) &cred&7/&3blue&7"
+					send "&7/bridge SetMaxBuildHeight &8(&7arena_name&8), optional"					
+					send "&7&l---------------------------------------------"
+					stop
+			if arg 1 is "join":		
+				if {bridge::player::%player%::state} is not set:
+					if {bridge::arena::%arg-2%::state} is "ready":
+						if {bridge::arena::%arg-2%::status} is "WAITING":
+							if size of {bridge::arena::%arg-2%::ninjas::*} < 2:
+								bridge_clear_player(player)
+								bridge_tag(player, "clear")
+								set {bridge::player::%player%::state} to "IN-GAME"
+								set {bridge::player::%player%::arena} to arg-2
+								set {bridge::player::%player%::kills} to 0
+								set slot 8 of player to {@item.leave.item} named "{@item.leave.name}"
+								add player to {bridge::arena::%arg-2%::ninjas::*}		
+								if size of {bridge::arena::%arg-2%::ninjas::*} = 2:
+									bridge_start_countdown(arg-2)											
+								send "{@join}" to {bridge::arena::%arg-2%::ninjas::*}
+								teleport player to {bridge::arena::%arg-2%::spawn::lobby}
+								bridge_waiting_scoreboard(player)
+							else:
+								send "{@prefix} &7This arena is full"
+								stop
+						else:
+							send "{@prefix} &7This game is running"
+							stop
+					else:
+						send "{@prefix} &7This arena not exists"
+						stop
+				else:
+					send "{@in-game}"
+					stop
+			if arg 1 is "list":		
+				if {bridge::player::%player%::state} is not set:	
+					open chest inventory with 6 rows named "&8&l» &7THE BRIDGE - ARENAS" to player	
+					set {_slot} to 10					
+					wait 2 ticks
+					make a gui slot 0, 1, 2, 3, 4, 5, 6, 7, 17, 26, 35, 44, 18, 27, 36, 9, 45, 46, 47, 48, 49, 50, 51, 52, 53 and 8 of player with green glass named "&8 " to do nothing					
+					loop {bridge::arenas::*}:
+						make a gui slot {_slot} of player with green clay named "&7" with lore "&8&l» &7NAME: &c&l%loop-value%||||&8&l» &7PLAYING: &3%size of {bridge::arena::%loop-value%::ninjas::*}%||||&8&l» &7STATE: &a%{bridge::arena::%loop-value%::status}%" to run player command "bridge join %loop-value%"
+						add 1 to {_slot}
+						if {_slot} is 17 or 26 or 35:
+							add 2 to {_slot}						
+			if arg 1 is "leave":	
+				if {bridge::player::%player%::state} is "IN-GAME":
+					bridge_leave(player)		
+				else:
+					send "{@not-in-game}"	
+			if arg 1 is "autojoin":		
+				if {bridge::player::%player%::state} is not set:
+					loop {bridge::arenas::*}:
+						if {bridge::arena::%loop-value%::status} is "WAITING":
+							make player execute command "bridge join %loop-value%"
+							stop
+			if arg-1 is "stats":
+				send "&8&l●&7&l&m----------------------&8&l●"
+				send ""
+				send "&3&l» &7&lWINS &c%{bridge::stats::wins::%uuid of player%}%"	
+				send "&3&l» &7&lKILLS &c%{bridge::stats::kills::%uuid of player%}%"	
+				send "&3&l» &7&lGOALS &c%{bridge::stats::goals::%uuid of player%}%"	
+				send "&3&l» &7&lDEATHS &c%{bridge::stats::deaths::%uuid of player%}%"				
+				send ""
+				send "&8&l●&7&l&m----------------------&8&l●"
+			if arg 1 is "createarena":	
+				if player has permission "bridge.admin":		
+					if arg-2 is set:
+						if {bridge::arena::%arg-2%::state} is not set:
+							set {bridge::arena::%arg-2%::state} to true
+							send "{@prefix} &aArena &c%arg-2% &ahas been created!"
+						else:
+							send "{@prefix} &aThis arena already exists!"	
+					else:
+						send "{@prefix} &aSpecify Arena!"				
+			if arg 1 is "setspawn":
+				if player has permission "bridge.admin":		
+					if {bridge::arena::%arg-2%::state} = "setup":
+						if arg-3 is "RED" or "BLUE" or "lobby":
+							set {bridge::arena::%arg-2%::spawn::%arg-3%} to location of player
+							send "{@prefix} &aSpawn for &e%arg-3% &aon Arena &3%arg-2% &ahas been set!"
+						else:
+							send "{@prefix} &aSpecify team."							
+					else:
+						send "{@prefix} &aThis arena not exists"						
+			if arg 1 is "setPortalPos1":
+				if player has permission "bridge.admin":
+					if {bridge::arena::%arg-2%::state} = "setup":
+						if arg-3 is "RED" or "BLUE":
+							set {bridge::arena::%arg-2%::portal::%arg-3%::POS-1} to location of player
+							send "{@prefix} &aPos&8(&c1&8) &c%arg-3% &aon Arena &3%arg-2% &ahas been set!"	
+						else:
+							send "{@prefix} &aSpecify team."						
+					else:
+						send "{@prefix} &aThis arena not exists"		
+			if arg 1 is "SetMaxBuildHeight":
+				if player has permission "bridge.admin":		
+					if {bridge::arena::%arg-2%::state} = "setup":
+						set {bridge::arena::%arg-2%::Y-COORDS} to y-coords of player
+						send "{@prefix} &aMax Build Height For Arena &3%arg-2% &ahas been set!"						
+					else:
+						send "{@prefix} &aThis arena not exists"								
+			if arg 1 is "setPortalPos2":
+				if player has permission "bridge.admin":		
+					if {bridge::arena::%arg-2%::state} = "setup":
+						if arg-3 is "RED" or "BLUE":
+							set {bridge::arena::%arg-2%::portal::%arg-3%::POS-2} to location of player
+							send "{@prefix} &aPos&8(&c2&8) &c%arg-3% &aon Arena &3%arg-2% &ahas been set!"	
+						else:
+							send "{@prefix} &aSpecify team."							
+					else:
+						send "{@prefix} &aThis arena not exists"						
+			if arg 1 is "setlobby":	
+				if player has permission "bridge.admin":
+					set {bridge::lobby} to location of player
+					send "{@prefix} &aLobby set."	
+			if arg 1 is "resetstats":	
+				if player has permission "bridge.admin":		
+					set {_p} to arg-2 parsed as player
+					bridge_reset_stats({_p})
+					send "{@prefix} &cReseted Stats for &a%{_p}%"	
+			if arg 1 is "savearena":	
+				if player has permission "bridge.admin":		
+					if {bridge::arena::%arg-2%::state} = "setup":
+						if {bridge::arena::%arg-2%::spawn::red} is set:
+							if {bridge::arena::%arg-2%::spawn::blue} is set:
+								if {bridge::arena::%arg-2%::spawn::lobby} is set:
+									if {bridge::arena::%arg-2%::portal::RED::POS-2} is set:
+										if {bridge::arena::%arg-2%::portal::RED::POS-1} is set:
+											if {bridge::arena::%arg-2%::portal::BLUE::POS-2} is set:
+												if {bridge::arena::%arg-2%::portal::BLUE::POS-1} is set:									
+													delete {bridge::arena::%arg-2%::state}
+													add arg-2 to {bridge::arenas::*}
+													set {bridge::arena::%arg-2%::state} to "ready"
+													send "{@prefix} &aArena &c%arg-2% &ahas been saved."
+													bridge_resetarena(arg-2)	
+												else:
+													send "{@prefix} &aPortal Pos1 For team &1blue is not set!"												
+											else:
+												send "{@prefix} &aPortal Pos2 For team &1blue is not set!"														
+										else:
+											send "{@prefix} &aPortal Pos1 For team &cred is not set!"												
+									else:
+										send "{@prefix} &aPortal Pos2 For team &cred is not set!"											
+								else:
+									send "{@prefix} &aLobby is not set!"						
+							else:
+								send "{@prefix} &aSpawn &3blue &a is not set!"						
+						else:
+							send "{@prefix} &aSpawn &cred &a is not set!"
+					else:
+						send "{@prefix} &aThis arena not exists"
+			if arg 1 is "deletearena":	
+				if player has permission "bridge.admin":		
+					if {bridge::arena::%arg-2%::state} is set:
+						delete {bridge::arena::%arg-2%::*}
+						remove arg-2 from {bridge::arenas::*}
+						send "{@prefix} &aArena &c%arg-2% &ahas been deleted."
+					else:
+						send "{@prefix} &aThis arena not exists"
+		else:
+			make player execute command "bridge help"
+		
+	
+on chat:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		cancel event	
+		if {bridge::arena::%{bridge::player::%player%::arena}%::status} is "IN-GAME":
+			if {bridge::player::%player%::team} = "red":
+				replace all "{team}" in {_msg} with "&c&lRED"
+				set {_team} to "&c&lRED"
+			if {bridge::player::%player%::team} = "blue":
+				replace all "{team}" in {_msg} with "&1&lBLUE"
+				set {_team} to "&1&lBLUE"
+		else:
+			set {_team} to ""
+		send "{@chat-format}" to {bridge::arena::%{bridge::player::%player%::arena}%::ninjas::*}	
+
+on hunger bar change:	
+	if {bridge::player::%player%::state} is "IN-GAME":
+		set player's hunger to 20
+		
+		
+on damage of player:
+	if {bridge::player::%victim%::state} is "IN-GAME":
+		if {bridge::arena::%{bridge::player::%victim%::arena}%::status} is "STARTING" or "WAITING":
+			cancel event
+			damage cause is void
+			teleport victim to {bridge::arena::%{bridge::player::%victim%::arena}%::spawn::lobby}
+		if {bridge::arena::%{bridge::player::% victim%::arena}%::status} is "IN-GAME":	
+			if damage >= health of victim:
+				cancel event
+				metadata value "BRIDGE-DEATH" of victim is not set:
+					set metadata value "BRIDGE-DEATH" of victim to "SET"
+					bridge_death(victim)
+			if attacker is player:
+				"%attacker%" != "%victim%"
+				set metadata value "LAST-HIT" of victim to attacker	
+			if damage cause is fall:
+				cancel event
+			if damage cause is void:
+				cancel event
+				metadata value "BRIDGE-DEATH" of victim is not set:
+					set metadata value "BRIDGE-DEATH" of victim to "SET"
+					bridge_death(victim)
+
+function bridge_death(p: player):
+	set {_uuid} to uuid of {_p}
+	add 1 to {bridge::stats::deaths::%{_uuid}%}
+	metadata value "LAST-HIT" of {_p} is not set:
+		set {_killer} to "void"
+	else:
+		set {_killer} to metadata value "LAST-HIT" of {_p} parsed as player
+		set {_uuid} to uuid of {_killer}
+		add 1 to {bridge::stats::kills::%{_uuid}%}
+		add 1 to {bridge::player::%{_killer}%::kills}			
+	send "{@kill}" to {bridge::arena::%{bridge::player::%{_p}%::arena}%::ninjas::*}	
+	delete metadata value "PORTAL" of {_p}
+	teleport {_p} to {bridge::arena::%{bridge::player::%{_p}%::arena}%::spawn::%{bridge::player::%{_p}%::team}%}	
+	bridge_equip({_p})
+	wait 3 seconds
+	delete metadata value "BRIDGE-DEATH" of {_p} 
+		
+	
+on place:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		if {bridge::arena::%{bridge::player::%player%::arena}%::status} is "IN-GAME":
+			if {bridge::arena::%{bridge::player::%player%::arena}%::Y-COORDS} is set:
+				if y-coords of location of event-block < {bridge::arena::%{bridge::player::%player%::arena}%::Y-COORDS}:
+					if {bridge::arena::%{bridge::player::%player%::arena}%::KILLMEPLS::%location of event-block%} is not set:
+						set {bridge::arena::%{bridge::player::%player%::arena}%::KILLMEPLS::%location of event-block%} to location of event-block
+				else:
+					cancel event
+			else:
+				if {bridge::arena::%{bridge::player::%player%::arena}%::KILLMEPLS::%location of event-block%} is not set:
+					set {bridge::arena::%{bridge::player::%player%::arena}%::KILLMEPLS::%location of event-block%} to location of event-block
+		else:
+			cancel event
+			
+on load:
+	send "&7&l--------------------------------------------" to console
+	send " " to console
+	send "{@prefix} &aLoading &ev.{@plugin-version}&a..." to console
+	wait a tick
+	send "{@prefix} &a&lPlugin loaded!" to console
+	send " " to console
+	send "&7&l--------------------------------------------" to console
+	delete {bridge::player::*}
+	if {bridge.arenas::*} is set:
+		send "&aOld version detected, converting arenas..." to console
+		loop {bridge.arenas::*}:
+			set {bridge::arena::%loop-value-1%::spawn::red} to {bridge.arena.%loop-value-1%.spawn.red}
+			set {bridge::arena::%loop-value-1%::spawn::blue} to {bridge.arena.%loop-value-1%.spawn.blue}
+			set {bridge::arena::%loop-value-1%::spawn::lobby} to {bridge.arena.%loop-value-1%.spawn.lobby}	
+			set {bridge::arena::%loop-value-1%::portal::RED::POS-1} to {bridge.arena.%loop-value-1%.portal.RED.pos1}
+			set {bridge::arena::%loop-value-1%::portal::RED::POS-2} to {bridge.arena.%loop-value-1%.portal.RED.pos2}
+			set {bridge::arena::%loop-value-1%::portal::BLUE::POS-1} to {bridge.arena.%loop-value-1%.portal.BLUE.pos1}
+			set {bridge::arena::%loop-value-1%::portal::BLUE::POS-2} to {bridge.arena.%loop-value-1%.portal.BLUE.pos2} 
+			set {bridge::arena::%loop-value-1%::state} to "ready"
+			add loop-value-1 to {bridge::arenas::*}
+			send "&aArena &e%loop-value-1% &aconverted." to console
+		delete {bridge.arenas::*}
+	loop {bridge::arenas::*}:
+		delete {bridge::arena::%loop-value%::ninjas::*}
+		bridge_resetarena(loop-value)
+	set {bridge::cache::TitleManager} to Bukkit.getServer().getPluginManager().getPlugin("TitleManager")	
+
+on unload:
+	send "&7&l--------------------------------------------" to console
+	send " " to console
+	send "{@prefix} &aDisabling &ev.{@plugin-version}&a..." to console
+	send "{@prefix} &ev.{@plugin-version} &adisabled!" to console
+	send " " to console
+	send "&7&l--------------------------------------------" to console
+	stop
+	
+on portal:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		if {bridge::arena::%{bridge::player::%player%::arena}%::status} is "IN-GAME":
+			metadata value "PORTAL" of player is not set
+			set metadata value "PORTAL" of player to "true"
+			if {bridge::player::%player%::team} is "RED":
+				if location of player is within {bridge::arena::%{bridge::player::%player%::arena}%::portal::BLUE::POS-1} to {bridge::arena::%{bridge::player::%player%::arena}%::portal::BLUE::POS-2}:
+					bridge_goal(player, {bridge::player::%player%::arena})
+			if {bridge::player::%player%::team} is "BLUE":
+				if location of player is within {bridge::arena::%{bridge::player::%player%::arena}%::portal::RED::POS-1} to {bridge::arena::%{bridge::player::%player%::arena}%::portal::RED::POS-2}:
+					bridge_goal(player, {bridge::player::%player%::arena})
+			wait 5 seconds
+			delete metadata value "PORTAL" of player					
+
+on join:
+	if {bridge::stats::goals::%player%} is not set:	
+		bridge_reset_stats(player)
+		
+
+		
+on consume of golden apple:	
+	if {bridge::player::%player%::state} is "IN-GAME":
+		heal player
+		
+on inventory click:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		if name of event-item is {@item.leave.item} named "{@item.leave.name}":
+			cancel event
+		if event-item is any chestplate or any helmet or any boots or any leggings:
+			cancel event
+		
+on drop:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		cancel event
+			
+on right click:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		if event-item is {@item.leave.item} named "{@item.leave.name}":
+			cancel event
+			bridge_leave(player)
+	
+on quit:
+	if {bridge::player::%player%::state} is "IN-GAME":
+		bridge_leave(player)
+	
+on break:
+	if {bridge::player::%player%::state} is "IN-GAME":	
+		if {bridge::arena::%{bridge::player::%player%::arena}%::KILLMEPLS::%location of event-block%} is set:
+			delete {bridge::arena::%{bridge::player::%player%::arena}%::KILLMEPLS::%location of event-block%}
+			stop
+		else:
+			if event-block is red clay or blue clay or white clay:
+				if {bridge::arena::%{bridge::player::%player%::arena}%::PLACEBLOCKS::%location of event-block%} is not set:
+					set {bridge::arena::%{bridge::player::%player%::arena}%::OMAE-MO-SHINDEIRU::%location of event-block%} to location of event-block
+					set {bridge::arena::%{bridge::player::%player%::arena}%::NANI?!::%location of event-block%} to "%event-block%" parsed as item
+			else:
+				cancel event
+				
+				
+function bridge_reset_stats(p: player):
+	set {_uuid} to uuid of {_p}
+	loop "kills", "deaths", "wins" and "goals":
+		set {bridge::stats::%loop-value%::%{_uuid}%} to 0
+
+function bridge_cage_timer(arena: text):	
+	set {_count.%{_arena}%} to 3
+	loop 4 times:
+		if {bridge::arena::%{_arena}%::status} is "IN-GAME":
+			{_count.%{_arena}%} = 3 or 2 or 1:
+				send title "&eCages opens in &a&l%{_count.%{_arena}%}% &eseconds" with subtitle "" to {bridge::arena::%{_arena}%::ninjas::*} with 10 fadein and 10 fadeout for 1
+			{_count.%{_arena}%} = 0:
+				bridge_setcage({bridge::arena::%{_arena}%::spawn::blue}, "AIR")
+				bridge_setcage({bridge::arena::%{_arena}%::spawn::red}, "AIR")	
+				send title "&3&lFIGHT!" with subtitle "" to {bridge::arena::%{_arena}%::ninjas::*} with 20 fadein and 20 fadeout for 1	
+			remove 1 from {_count.%{_arena}%} 				
+			wait a second				
+			
+function bridge_tag(p: player, do: text):
+	if {_do} is "setteam":
+		if {bridge::player::%{_p}%::team} is "RED":
+			set {_team} to "&c&lRED"
+		if {bridge::player::%{_p}%::team} is "BLUE":
+			set {_team} to "&1&lBLUE"	
+		make console execute command "nte player %{_p}% prefix %{_team}% &7"
+	if {_do} is "clear":		
+		make console execute command "nte player %{_p}% clear"		
+		
+function bridge_setcage(loc: location, team: text):
+	if {_team} is "RED": 
+		set {_b} to red glass block
+	if {_team} is "BLUE": 
+		set {_b} to blue glass block
+	if {_team} is "AIR": 
+		set {_b} to air	
+	loop blocks within block at block 2 above west 3 east 3 south {_loc} to block at block 1 under east 3 west 3 north {_loc}:
+		set loop-block to {_b}
+	loop blocks within block at block 2 above west 2 east 2 south {_loc} to block at block 0 under east 2 west 2 north {_loc}:
+		set loop-block to air
+	
+	
+function bridge_equip(p: player):
+	bridge_clear_player({_p})
+	wait 0.5 second
+	equip {_p} with all leather armor
+	set slot 0 of {_p} to iron sword
+	set slot 1 of {_p} to bow
+	set slot 2 of {_p} to diamond pickaxe of efficiency 2
+	set slot 5 of {_p} to 8 golden apple
+	set slot 8 of {_p} to arrow
+	if {bridge::player::%{_p}%::team} is "RED":		
+		set {_p}'s helmet to air
+		dye {_p}'s chestplate red
+		dye {_p}'s boots red		
+		dye {_p}'s leggings red
+		set slot 3 of {_p} to 64 red clay		
+		set slot 4 of {_p} to 64 red clay			
+	if {bridge::player::%{_p}%::team} is "BLUE":	
+		set {_p}'s helmet to air
+		dye {_p}'s chestplate blue
+		dye {_p}'s boots blue		
+		dye {_p}'s leggings blue	
+		set slot 3 of {_p} to 64 blue clay	
+		set slot 4 of {_p} to 64 blue clay		
+
+on shoot:
+	if {bridge::player::%shooter%::state} is "IN-GAME":		
+		if projectile is arrow:
+			set metadata value "GAME" of projectile to "BRIDGE"
+		loop 3 times:
+			set shooter's level to loop-number
+			wait a second
+			loop-number = 3:
+				if {bridge::player::%shooter%::state} is "IN-GAME":	
+					give 1 arrow to shooter
+			
+			
+on projectile hit:
+	if metadata value "GAME" of projectile is "BRIDGE":
+		delete projectile
+
+function bridge_leave(p: player):
+	send "{@left}" to {bridge::arena::%{bridge::player::%{_p}%::arena}%::ninjas::*}		
+	remove {_p} from {bridge::arena::%{bridge::player::%{_p}%::arena}%::ninjas::*}
+	if {bridge::arena::%{bridge::player::%{_p}%::arena}%::status} is "IN-GAME":
+		if {bridge::player::%{_p}%::team} is "BLUE":
+			bridge_winner({bridge::arena::%{bridge::player::%{_p}%::arena}%::red}, {bridge::player::%{_p}%::arena})	
+		if {bridge::player::%{_p}%::team} is "RED":
+			bridge_winner({bridge::arena::%{bridge::player::%{_p}%::arena}%::blue}, {bridge::player::%{_p}%::arena})	
+	delete scoreboard of {_p}
+	loop "arena", "team" and "state":
+		delete {bridge::player::%{_p}%::%loop-value%}
+	bridge_clear_player({_p})
+	bridge_tag({_p}, "clear")
+	teleport {_p} to {bridge::lobby}		
+
+function bridge_put_in_team(p: player, arena: text):
+	if {bridge::arena::%{_arena}%::red} is not set:	
+		set {bridge::arena::%{_arena}%::red} to {_p}
+		set {bridge::player::%{_p}%::team} to "RED"
+		stop
+	if {bridge::arena::%{_arena}%::blue} is not set:	
+		set {bridge::arena::%{_arena}%::blue} to {_p}
+		set {bridge::player::%{_p}%::team} to "BLUE"
+						
+function bridge_start_countdown(arena: text):
+	set {bridge::arena::%{_arena}%::status} to "STARTING"
+	while {bridge::arena::%{_arena}%::seconds} > 0:
+		if size of {bridge::arena::%{_arena}%::ninjas::*} = 2:
+			wait a second
+			remove 1 from {bridge::arena::%{_arena}%::seconds}	
+			if {bridge::arena::%{_arena}%::seconds} = 1 or 2 or 3 or 4 or 5 or 10:
+				send "{@starting}" to {bridge::arena::%{_arena}%::ninjas::*}					
+			if {bridge::arena::%{_arena}%::seconds} = 1:
+				set {bridge::arena::%{_arena}%::status} to "IN-GAME"	
+				loop {bridge::arena::%{_arena}%::ninjas::*}:
+					bridge_put_in_team(loop-value, {_arena})
+					delete scoreboard of loop-value
+					bridge_game_scoreboard(loop-value)
+				set {bridge::arena::%{_arena}%::goals::red} to 0
+				set {bridge::arena::%{_arena}%::goals::blue} to 0				
+				bridge_setcage({bridge::arena::%{_arena}%::spawn::blue}, "BLUE")
+				bridge_setcage({bridge::arena::%{_arena}%::spawn::red}, "RED")		
+				teleport {bridge::arena::%{_arena}%::red} to {bridge::arena::%{_arena}%::spawn::red}
+				teleport {bridge::arena::%{_arena}%::blue} to {bridge::arena::%{_arena}%::spawn::blue}
+				bridge_equip({bridge::arena::%{_arena}%::red})	
+				bridge_equip({bridge::arena::%{_arena}%::blue})
+				bridge_tag({bridge::arena::%{_arena}%::red}, "setteam")
+				bridge_tag({bridge::arena::%{_arena}%::blue}, "setteam")
+				bridge_cage_timer({_arena})	
+				stop	
+		else:
+			set {bridge::arena::%{_arena}%::status} to "WAITING"
+			set {bridge::arena::%{_arena}%::seconds} to 10
+			stop
+	
+function bridge_goal(p: player, arena: text):	
+	set {_uuid} to uuid of {_p}
+	add 1 to {bridge::arena::%{_arena}%::goals::%{bridge::player::%{_p}%::team}%}
+	add 1 to {bridge::stats::goals::%{_uuid}%}
+	if {bridge::player::%{_p}%::team} is "RED":
+		set {_team} to "&3&lRED"
+	if {bridge::player::%{_p}%::team} is "BLUE":
+		set {_team} to "&1&lBLUE"			
+	send "&a&l■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■" to {bridge::arena::%{_arena}%::ninjas::*}	
+	send " " to {bridge::arena::%{_arena}%::ninjas::*}	
+	send "                 &e%{_p}% &7(&a%{_p}'s health% &c&l❤&7) &escored! &7(&6%{bridge::arena::%{_arena}%::goals::%{bridge::player::%{_p}%::team}%}%&6th goal&7)" to {bridge::arena::%{_arena}%::ninjas::*}		
+	send "                               &c&l%{bridge::arena::%{_arena}%::goals::red}% &7- &1&l%{bridge::arena::%{_arena}%::goals::blue}%" to {bridge::arena::%{_arena}%::ninjas::*}	
+	send " " to {bridge::arena::%{_arena}%::ninjas::*}	
+	send " " to {bridge::arena::%{_arena}%::ninjas::*}	
+	send "&a&l■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■" to {bridge::arena::%{_arena}%::ninjas::*}	
+	teleport {bridge::arena::%{_arena}%::red} to {bridge::arena::%{_arena}%::spawn::red}
+	teleport {bridge::arena::%{_arena}%::blue} to {bridge::arena::%{_arena}%::spawn::blue}	
+	if {bridge::arena::%{_arena}%::goals::%{bridge::player::%{_p}%::team}%} is not 5:
+		bridge_setcage({bridge::arena::%{_arena}%::spawn::blue}, "BLUE")
+		bridge_setcage({bridge::arena::%{_arena}%::spawn::red}, "RED")		
+		bridge_cage_timer({_arena})
+		bridge_equip({bridge::arena::%{_arena}%::blue})			
+		bridge_equip({bridge::arena::%{_arena}%::red})	
+	if {bridge::arena::%{_arena}%::goals::%{bridge::player::%{_p}%::team}%} is 5:
+		bridge_winner({_p}, {_arena})
+		
+	
+function bridge_winner(p: player, arena: text):
+	set {_uuid} to uuid of {_p}
+	if {bridge::player::%{_p}%::team} is "RED":
+		set {_team} to "&c&lRED"
+	if {bridge::player::%{_p}%::team} is "BLUE":
+		set {_team} to "&1&lBLUE"		
+	send "&a&l■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■" to {bridge::arena::%{_arena}%::ninjas::*}	
+	send " " to {bridge::arena::%{_arena}%::ninjas::*}	
+	send "                          &f&lTHE BRIDGE &a&l1v1" to {bridge::arena::%{_arena}%::ninjas::*}		
+	send " " to {bridge::arena::%{_arena}%::ninjas::*}	
+	send "                            %{_team}% &7&lWINS" to {bridge::arena::%{_arena}%::ninjas::*}	
+	send "                               &c&l%{bridge::arena::%{_arena}%::goals::red}% &7- &1&l%{bridge::arena::%{_arena}%::goals::blue}%" to {bridge::arena::%{_arena}%::ninjas::*}		
+	send " " to {bridge::arena::%{_arena}%::ninjas::*}	
+	send "&a&l■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■" to {bridge::arena::%{_arena}%::ninjas::*}		
+	add 1 to {bridge::stats::wins::%{_uuid}%}
+	loop 10 times:
+		if {bridge::player::%{_p}%::state} is "IN-GAME":
+			if minecraft version contains "1.8" or "1.9" or "1.10" or "1.11" or "1.12":		
+				launch random element out of "CREEPER" and "STAR" and "BALL" firework at location of {bridge::player::%{_p}%::state} timed 1 coloured "GREEN"		
+			wait 10 ticks					
+	bridge_resetarena({_arena})
+
+
+function bridge_resetarena(arena: text):
+	loop {bridge::arena::%{_arena}%::ninjas::*}:
+		delete {bridge::player::%loop-value%::state}
+		delete {bridge::player::%loop-value%::arena}
+		bridge_clear_player(loop-value-1)
+		bridge_tag(loop-value-1, "clear")
+		delete scoreboard of loop-value-1
+		teleport loop-value-1 to {bridge::lobby}
+	loop {bridge::arena::%{_arena}%::KILLMEPLS::*}:
+		set block at loop-value to air
+		wait a tick
+	loop {bridge::arena::%{_arena}%::OMAE-MO-SHINDEIRU::*}:
+		set block at location of {bridge::arena::%{_arena}%::OMAE-MO-SHINDEIRU::%loop-index%} to {bridge::arena::%{_arena}%::NANI?!::%loop-index%}
+		wait a tick
+	delete {bridge::arena::%{_arena}%::OMAE-MO-SHINDEIRU::*}
+	delete {bridge::arena::%{_arena}%::NANI?!::*}		
+	delete {bridge::arena::%{_arena}%::KILLMEPLS::*}	
+	delete {bridge::arena::%{_arena}%::ninjas::*}	
+	delete {bridge::arena::%{_arena}%::red}
+	delete {bridge::arena::%{_arena}%::blue}	
+	loop all entities in radius 500 around {bridge::arena::%{_arena}%::spawn::blue}:
+		clear loop-entity		
+	bridge_setcage({bridge::arena::%{_arena}%::spawn::blue}, "AIR")
+	bridge_setcage({bridge::arena::%{_arena}%::spawn::red}, "AIR")				
+	set {bridge::arena::%{_arena}%::goals::red} to 0
+	set {bridge::arena::%{_arena}%::goals::blue} to 0	
+	set {bridge::arena::%{_arena}%::seconds} to 10
+	set {bridge::arena::%{_arena}%::status} to "WAITING"
+			
+function bridge_clear_player(p: player):
+	heal {_p}
+	extinguish {_p}
+	set {_p}'s food to 20	
+	clear {_p}'s level
+	clear {_p}'s inventory
+	set {_p}'s gamemode to survival
+	set {_p}'s flight mode to false						
+	delete metadata value "PORTAL" of {_p}	
+	delete metadata value "LAST-HIT" of {_p}
+	loop ...{_p}.getActivePotionEffects():
+		{_p}.removePotionEffect(loop-value-1.getType())	
+			
+function bridge_setSlot(p: player, slot: number, t: text):
+	add "&a", "&b", "&c", "&d", "&e", "&1", "&2", "&3", "&4", "&5", "&6", "&7", "&8", "&9" and "&f" to {_d::*}
+	if {_slot} is between 1 and 15: 
+		set scoreboard line {_slot} of {_p} to "%{_d::%{_slot}%}%%{_t}%"
+
+function bridge_waiting_scoreboard(p: player):
+	create scoreboard for {_p}
+	set scoreboard title of {_p} to "&e&lTHE BRIDGE"	
+	while {bridge::arena::%{bridge::player::%{_p}%::arena}%::status} is "WAITING" or "STARTING":	 
+		bridge_setSlot({_p}, 1, "&7%now%") 
+		bridge_setSlot({_p}, 2, "")
+		bridge_setSlot({_p}, 3, "&fPlayers: &a%size of {bridge::arena::%{bridge::player::%{_p}%::arena}%::ninjas::*}%")				
+		bridge_setSlot({_p}, 4, "")				
+		bridge_setSlot({_p}, 5, "&fStarting in &a%{bridge::arena::%{bridge::player::%{_p}%::arena}%::seconds}%s") 
+		bridge_setSlot({_p}, 6, "")	
+		bridge_setSlot({_p}, 7, "&fMode: &e1v1")	
+		bridge_setSlot({_p}, 8, "&fMap: &a%{bridge::player::%{_p}%::arena}%")								
+		bridge_setSlot({_p}, 9, "")
+		bridge_setSlot({_p}, 10, "&e&lMC.SERVER.ORG")
+		wait 0.5 second
+
+function bridge_game_scoreboard(p: player):
+	create scoreboard for {_p}
+	set scoreboard title of {_p} to "&e&lTHE BRIDGE"
+	while {bridge::arena::%{bridge::player::%{_p}%::arena}%::status} is "IN-GAME":
+		bridge_setSlot({_p}, 1, "&7%now%") 
+		bridge_setSlot({_p}, 2, "")
+		bridge_setSlot({_p}, 3, "&8✦ &1Blue Team: &e%{bridge::arena::%{bridge::player::%{_p}%::arena}%::goals::blue}%&7/5")	
+		bridge_setSlot({_p}, 4, "&8✦ &cRed Team: &e%{bridge::arena::%{bridge::player::%{_p}%::arena}%::goals::red}%&7/5") 
+		bridge_setSlot({_p}, 5, "")
+		bridge_setSlot({_p}, 6, "&fKills: &a%{bridge::player::%{_p}%::kills}%")	
+		bridge_setSlot({_p}, 7, "&fGoals: &a%{bridge::arena::%{bridge::player::%{_p}%::arena}%::goals::%{bridge::player::%{_p}%::team}%}%")
+		bridge_setSlot({_p}, 8, "")
+		bridge_setSlot({_p}, 9, "&fMode: &e1v1")	
+		bridge_setSlot({_p}, 10, "&fMap: &a%{bridge::player::%{_p}%::arena}%")			
+		bridge_setSlot({_p}, 11, "")
+		bridge_setSlot({_p}, 12, "&e&lMC.SERVER.ORG")
+		wait a second
+				
+				
+
+
+
+
+
+
+
+
+
+
+					
+					
+				
+				
+				
+				
+		
+				
