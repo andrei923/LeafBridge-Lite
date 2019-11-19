@@ -5,7 +5,7 @@ import:
 
 options:
 
-	plugin-version: 0.1.0
+	plugin-version: 0.1.0b
 	prefix: &6&lThe Bridge &7
 	chat-format: %{_team}% &7%player's displayname% &8» &7%message% 
 	
@@ -153,7 +153,7 @@ command bridge [<text>] [<text>] [<text>]:
 				if player has permission "bridge.admin":		
 					if arg-2 is set:
 						if {bridge::arena::%arg-2%::state} is not set:
-							set {bridge::arena::%arg-2%::state} to true
+							set {bridge::arena::%arg-2%::state} to "setup"
 							send "{@prefix} &aArena &c%arg-2% &ahas been created!"
 						else:
 							send "{@prefix} &aThis arena already exists!"	
